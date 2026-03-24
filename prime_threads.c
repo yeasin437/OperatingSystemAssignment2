@@ -126,10 +126,7 @@ void multi_thread(int num_threads, int max) {
     for (int i = 0; i < num_threads; i++) {
         data[i].start = i * step + 1;
 
-        /*
-           The last thread takes the remaining numbers too.
-           This makes sure the full range up to max is covered.
-        */
+       
         if (i == num_threads - 1)
             data[i].end = max;
         else
