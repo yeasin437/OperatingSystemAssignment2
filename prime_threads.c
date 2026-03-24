@@ -5,13 +5,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#define MAX 500000
-
 /* 
-   This structure is used to give each thread its own range.
-   start = first number to check
-   end   = last number to check
-   count = how many primes this thread found
+   This structure is used to give each thread its own data.
+   start = first number in that thread's range
+   end   = last number in that thread's range
+   count = number of primes found by that thread
 */
 typedef struct {
     int start;
@@ -20,7 +18,7 @@ typedef struct {
 } ThreadData;
 
 /* 
-   Check if a number is prime.
+   Checks if a number is prime.
    Returns 1 if prime, 0 if not prime.
 */
 int is_prime(int n) {
@@ -44,11 +42,11 @@ int is_prime(int n) {
 }
 
 /*
-   This is the function each thread runs.
+   This function is executed by each thread.
 
-   The thread receives a pointer to its own ThreadData.
-   It checks all numbers in its assigned range and counts primes.
-   When finished, it stores the result in data->count.
+   Each thread receives a pointer to its own ThreadData structure.
+   It checks all numbers from start to end and counts how many are prime.
+   When finished, it saves the result in data->count.
 */
 void* count_primes(void* arg) {
     ThreadData* data = (ThreadData*)arg;
@@ -65,8 +63,8 @@ void* count_primes(void* arg) {
 }
 
 /*
-   Get current time in milliseconds.
-   This is used to measure execution time.
+   Returns current time in milliseconds.
+   Used to measure execution time.
 */
 double get_time_ms() {
     struct timespec ts;
@@ -76,15 +74,14 @@ double get_time_ms() {
 }
 
 /*
-   Single-threaded version:
-   One thread (the main thread) does all the work.
+   Single-threaded version.
+   The main thread alone checks the full range.
 */
-void single_thread() {
+void single_thread(int max) {
     double start_time = get_time_ms();
-
     int total = 0;
 
-    for (int i = 1; i <= MAX; i++) {
+    for (int i = 1; i <= max; i++) {
         if (is_prime(i)) {
             total++;
         }
@@ -98,40 +95,45 @@ void single_thread() {
 }
 
 /*
-   Multi-threaded version:
-   The range 1 to MAX is divided into smaller parts.
-   Each thread gets one part and counts primes in that part.
+   Multi-threaded version.
+
+   The full range is divided into smaller parts.
+   Each part is assigned to one thread.
+   All threads run the same function, count_primes(),
+   but each thread works on a different range.
 */
-void multi_thread(int num_threads) {
+void multi_thread(int num_threads, int max) {
     pthread_t threads[num_threads];
     ThreadData data[num_threads];
 
-    int step = MAX / num_threads;
+    int step = max / num_threads;
     double start_time = get_time_ms();
 
     /*
-       Create threads.
+       THREAD CREATION LOGIC:
 
+       This loop creates all worker threads.
        For each thread:
-       - set its start and end range
-       - set count to 0
-       - call pthread_create() to start the thread
+       1. assign a start value
+       2. assign an end value
+       3. set count to 0
+       4. call pthread_create()
 
-       pthread_create() starts a new thread and makes it run
-       the count_primes function.
+       pthread_create() starts a new thread.
+       That new thread begins running count_primes()
+       and receives &data[i] as its argument.
     */
     for (int i = 0; i < num_threads; i++) {
         data[i].start = i * step + 1;
 
-        /* 
-           The last thread takes the remaining numbers too,
-           so the full range up to MAX is covered.
+        /*
+           The last thread takes the remaining numbers too.
+           This makes sure the full range up to max is covered.
         */
-        if (i == num_threads - 1) {
-            data[i].end = MAX;
-        } else {
+        if (i == num_threads - 1)
+            data[i].end = max;
+        else
             data[i].end = (i + 1) * step;
-        }
 
         data[i].count = 0;
 
@@ -144,13 +146,16 @@ void multi_thread(int num_threads) {
     int total = 0;
 
     /*
-       Join threads.
+       THREAD JOINING LOGIC:
 
        pthread_join() makes the main thread wait until
-       each worker thread finishes.
+       each worker thread finishes its work.
 
-       This is important because we should not add the results
-       until all threads are done with their work.
+       This is necessary because the main thread should not
+       print the final answer before all threads complete.
+
+       After a thread finishes, its prime count is stored in data[i].count.
+       The main thread adds that partial result to total.
     */
     for (int i = 0; i < num_threads; i++) {
         if (pthread_join(threads[i], NULL) != 0) {
@@ -171,9 +176,12 @@ void multi_thread(int num_threads) {
 int main() {
     int choice;
     int num_threads;
+    int max = 500000;
+
+    /* get number of logical processors available */
     int max_threads = sysconf(_SC_NPROCESSORS_ONLN);
 
-    printf("Prime Number Finder (1 to %d)\n", MAX);
+    printf("Prime Number Finder (1 to %d)\n", max);
     printf("Logical processors: %d\n", max_threads);
 
     printf("\nChoose mode:\n");
@@ -187,7 +195,7 @@ int main() {
     }
 
     if (choice == 1) {
-        single_thread();
+        single_thread(max);
     }
     else if (choice == 2) {
         printf("Enter number of threads (1 to %d): ", max_threads);
@@ -202,7 +210,7 @@ int main() {
             return 1;
         }
 
-        multi_thread(num_threads);
+        multi_thread(num_threads, max);
     }
     else {
         printf("Invalid choice.\n");
